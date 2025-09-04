@@ -8,7 +8,10 @@ export class Game {
       [0, 0, 0, 0],
     ];
     this.score = 0;
-    this.status = 'idle'; // 'idle', 'playing', 'won', 'over'
+    this.status = 'idle';
+
+    // sprawdź od razu, czy gra nie jest od razu wygrana lub przegrana
+    this.updateStatus();
   }
 
   getState() {
@@ -62,101 +65,147 @@ export class Game {
   }
 
   slideAndMerge(row) {
-    const filtered = row.filter((v) => v !== 0);
-    const newRow = [];
-    let skip = false;
+    const filtered = row.filter((val) => val !== 0);
+    const result = [];
+    let i = 0;
 
-    for (let i = 0; i < filtered.length; i++) {
-      if (skip) {
-        skip = false;
-        continue;
-      }
-
+    while (i < filtered.length) {
       if (filtered[i] === filtered[i + 1]) {
         const merged = filtered[i] * 2;
 
-        newRow.push(merged);
+        result.push(merged);
         this.score += merged;
-        skip = true;
-
-        if (merged === 2048) {
-          this.status = 'won';
-        }
+        i += 2; // SKIP the next tile after merge
       } else {
-        newRow.push(filtered[i]);
+        result.push(filtered[i]);
+        i += 1;
       }
     }
 
-    while (newRow.length < 4) {
-      newRow.push(0);
+    while (result.length < 4) {
+      result.push(0);
     }
 
-    return newRow;
+    return result;
   }
 
   moveLeft() {
-    this.state = this.state.map((row) => this.slideAndMerge(row));
-    this.addRandomTile();
-    this.checkGameOver();
+    const beforeMove = JSON.stringify(this.state);
+
+    const newState = this.state.map((row) => this.slideAndMerge(row));
+
+    const afterMove = JSON.stringify(newState);
+
+    if (beforeMove !== afterMove) {
+      this.state = newState;
+      this.addRandomTile();
+      this.updateStatus();
+    }
   }
 
   moveRight() {
-    const slideRow = (row) => this.slideAndMerge([...row].reverse()).reverse();
+    const beforeMove = JSON.stringify(this.state);
 
-    this.state = this.state.map(slideRow);
-    this.addRandomTile();
-    this.checkGameOver();
+    const merged = this.state.map((row) => {
+      return this.slideAndMerge([...row].reverse()).reverse();
+    });
+    const newState = merged;
+
+    const afterMove = JSON.stringify(newState);
+
+    if (beforeMove !== afterMove) {
+      this.state = newState;
+      this.addRandomTile();
+      this.updateStatus();
+    }
   }
 
   moveUp() {
-    const slideRow = (row) => this.slideAndMerge(row);
+    const beforeMove = JSON.stringify(this.state);
 
-    this.state = this.transpose(this.state).map(slideRow);
-    this.state = this.transpose(this.state);
-    this.addRandomTile();
-    this.checkGameOver();
+    const transposed = this.transpose(this.state);
+    const merged = transposed.map((row) => this.slideAndMerge(row));
+    const newState = this.transpose(merged);
+
+    const afterMove = JSON.stringify(newState);
+
+    if (beforeMove !== afterMove) {
+      this.state = newState;
+      this.addRandomTile();
+      this.updateStatus();
+    }
   }
 
   moveDown() {
-    const slideRow = (row) => this.slideAndMerge([...row].reverse()).reverse();
+    const beforeMove = JSON.stringify(this.state);
 
-    this.state = this.transpose(this.state).map(slideRow);
-    this.state = this.transpose(this.state);
-    this.addRandomTile();
-    this.checkGameOver();
+    let newState = this.transpose(this.state).map((row) => {
+      return this.slideAndMerge([...row].reverse()).reverse();
+    });
+
+    newState = this.transpose(newState);
+
+    const afterMove = JSON.stringify(newState);
+
+    if (beforeMove !== afterMove) {
+      this.state = newState;
+      this.addRandomTile();
+      this.updateStatus();
+    }
   }
 
   transpose(matrix) {
     return matrix[0].map((_, c) => matrix.map((row) => row[c]));
   }
 
-  checkGameOver() {
-    if (this.status === 'won') {
+  updateStatus() {
+    // sprawdź, czy ktoś wygrał
+    for (const row of this.state) {
+      if (row.includes(2048)) {
+        this.status = 'won';
+
+        return;
+      }
+    }
+
+    // sprawdź, czy są możliwe ruchy
+    if (!this.hasMoves()) {
+      this.status = 'over';
+
       return;
     }
 
-    const canMove = () => {
-      for (let r = 0; r < 4; r++) {
-        for (let c = 0; c < 4; c++) {
-          if (this.state[r][c] === 0) {
-            return true;
-          }
+    // w przeciwnym wypadku gra trwa
+    this.status = 'playing';
+  }
 
-          if (c < 3 && this.state[r][c] === this.state[r][c + 1]) {
-            return true;
-          }
+  // sprawdza, czy są możliwe ruchy
+  hasMoves() {
+    // pusta komórka?
+    for (const row of this.state) {
+      if (row.includes(0)) {
+        return true;
+      }
+    }
 
-          if (r < 3 && this.state[r][c] === this.state[r + 1][c]) {
-            return true;
-          }
+    // czy sąsiednie komórki można scalić w poziomie?
+    for (let r = 0; r < 4; r++) {
+      for (let c = 0; c < 3; c++) {
+        if (this.state[r][c] === this.state[r][c + 1]) {
+          return true;
         }
       }
-
-      return false;
-    };
-
-    if (!canMove()) {
-      this.status = 'over';
     }
+
+    // czy sąsiednie komórki można scalić w pionie?
+    for (let c = 0; c < 4; c++) {
+      for (let r = 0; r < 3; r++) {
+        if (this.state[r][c] === this.state[r + 1][c]) {
+          return true;
+        }
+      }
+    }
+
+    return false; // brak możliwych ruchów
   }
 }
